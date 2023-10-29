@@ -4,7 +4,7 @@
 
 0. make sure you run script on machine with ssh key that is entered on your vastai account: https://cloud.vast.ai/account/
 1. sudo git clone https://github.com/tr4vLer/vastai_performance_bot.git && cd ../vastai_performance_bot && sudo chmod 600 api_key.txt && sudo chmod +x check_gpu_perf_bot_1.py
-2. sudo nano api_key.txt #update with your API key
+2. sudo nano api_key.txt
 3. sudo sh -c 'nohup python3 check_gpu_perf_bot_1.py > debug_output.log 2>&1 &' && tail -f debug_output.log
 
 **Requirments**
