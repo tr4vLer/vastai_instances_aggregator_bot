@@ -19,3 +19,6 @@ datetime
 1. Am not porgrammer and code is far from perfect. Its just for fun.
 2. You might want edit script (line 91) with diffent location for your private ssh key, especially with diffrent username. Am using Ed25519Key that is located at /home/admin/.ssh/id_ed25519
 3. You might also want to change Ed25519Key to diffrent auth method (line 99)
+
+
+**If you want to buy me a coffe (ERC20):  0x7aeEaB74451ab483dc82199597Fd4261ba0BF499**
