@@ -60,11 +60,13 @@ def instance_list():
             dph_total = instance.get('dph_total', 'N/A')
             ssh_host = instance.get('ssh_host', 'N/A')
             ssh_port = instance.get('ssh_port', 'N/A')
+            num_gpus = instance.get('num_gpus', 'N/A')
 
             logging.info("Instance ID: %s", instance_id)
             logging.info("GPU Name: %s", gpu_name)
             logging.info("Dollars Per Hour (DPH): %s", dph_total)
             logging.info("SSH Command: ssh -p %s root@%s -L 8080:localhost:8080", ssh_port, ssh_host)
+            logging.info("Number of GPUs: %s", num_gpus)
             logging.info("-" * 30)
 
             ssh_info = {
@@ -72,7 +74,8 @@ def instance_list():
                 'gpu_name': gpu_name,
                 'dph_total': dph_total,
                 'ssh_host': ssh_host,
-                'ssh_port': ssh_port
+                'ssh_port': ssh_port,
+                'num_gpus': num_gpus
             }
             ssh_info_list.append(ssh_info)
 
@@ -138,7 +141,7 @@ from prettytable import PrettyTable
 def print_table(data, output_file='table_output.txt'):
     # Define the table and its columns
     table = PrettyTable()
-    table.field_names = ["Instance ID", "GPU Name", "DPH", "XNM Blocks", "Runtime (hours)", "Block/h", "$/Blocks"]
+    table.field_names = ["Instance ID", "GPU Name", "GPU count", "DPH", "XNM Blocks", "Runtime (hours)", "Block/h", "$/Blocks"]
     
     # Add rows to the table to console
     for row in data:
@@ -172,6 +175,7 @@ table_data = []
 for ssh_info in ssh_info_list:
     instance_id = ssh_info['instance_id']
     gpu_name = ssh_info['gpu_name']
+    num_gpus = ssh_info['num_gpus']
     dph_total = float(ssh_info['dph_total'])  # Convert DPH to float for calculations
     ssh_host = ssh_info['ssh_host']
     ssh_host = ssh_info['ssh_host']
@@ -191,12 +195,12 @@ for ssh_info in ssh_info_list:
         # Calculate Blocks/$ and handle the case when the number of blocks is zero
         blocks_per_dollar = (runtime_hours * dph_total) / normal_blocks if normal_blocks != 0 else 0
         
-        table_data.append([instance_id, gpu_name, round(dph_total, 4), normal_blocks, round(runtime_hours, 2), round(block_per_hour, 2), round(blocks_per_dollar, 2)])
+        table_data.append([instance_id, gpu_name, num_gpus, round(dph_total, 4), normal_blocks, round(runtime_hours, 2), round(block_per_hour, 2), round(blocks_per_dollar, 2)])
     else:
         logging.error("Failed to retrieve log information for instance ID: %s", instance_id)
 
 # Sort the data by "Blocks/$" in increasing order
-table_data.sort(key=lambda x: x[6] if x[6] is not None else float('-inf'))
+table_data.sort(key=lambda x: x[7] if x[7] is not None else float('-inf'))
 
 # Print the table
 print_table(table_data)
