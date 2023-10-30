@@ -138,7 +138,7 @@ def get_log_info(ssh_host, ssh_port, username):
 
 
 from prettytable import PrettyTable      
-def print_table(data, output_file='table_output.txt'):
+def print_table(data, mean_difficulty, output_file='table_output.txt'):
     # Define the table and its columns
     table = PrettyTable()
     table.field_names = ["Instance ID", "GPU Name", "GPU count", "DPH", "XNM Blocks", "Runtime (hours)", "Block/h", "$/Blocks"]
@@ -151,13 +151,13 @@ def print_table(data, output_file='table_output.txt'):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Print the table
-    if difficulty is not None:
-        print(f"\nTimestamp: {timestamp}, Difficulty: {difficulty}")
+    if mean_difficulty is not None:
+        print(f"\nTimestamp: {timestamp}, Difficulty: {mean_difficulty:.2f}")
     print(table)
 
     # Write the table and timestamp to a text file
     with open(output_file, 'a') as f:
-        f.write(f"Timestamp: {timestamp}, Difficulty: {difficulty}\n{table}\n")
+        f.write(f"Timestamp: {timestamp}, Difficulty: {mean_difficulty:.2f}\n{table}\n")
     print(f"Table also written to {output_file}")
 
 
@@ -170,6 +170,7 @@ username = "root"
 
 # Store the data for the table
 table_data = []
+difficulties = []
 
 # Fetch Log Information for Each Instance
 for ssh_info in ssh_info_list:
@@ -183,6 +184,9 @@ for ssh_info in ssh_info_list:
 
     logging.info("Fetching log info for instance ID: %s", instance_id)
     hours, minutes, seconds, normal_blocks, difficulty = get_log_info(ssh_host, ssh_port, username)
+    
+    if difficulty is not None and difficulty != 0:
+        difficulties.append(difficulty)
     
     if hours is not None:
         runtime_hours = hours + minutes / 60 + seconds / 3600
@@ -199,11 +203,17 @@ for ssh_info in ssh_info_list:
     else:
         logging.error("Failed to retrieve log information for instance ID: %s", instance_id)
 
+    if difficulties:
+        mean_difficulty = sum(difficulties) / len(difficulties)
+        logging.info("Difficulty: %.2f", mean_difficulty)
+    else:
+        logging.info("No valid difficulties were found.")
+
 # Sort the data by "Blocks/$" in increasing order
 table_data.sort(key=lambda x: x[7] if x[7] is not None else float('-inf'))
 
 # Print the table
-print_table(table_data)
+print_table(table_data, mean_difficulty)
 
 # Exit the script
 sys.exit()
