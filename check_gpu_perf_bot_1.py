@@ -152,12 +152,12 @@ def print_table(data, mean_difficulty, output_file='table_output.txt'):
 
     # Print the table
     if mean_difficulty is not None:
-        print(f"\nTimestamp: {timestamp}, Difficulty: {mean_difficulty}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph:.4f}$")
+        print(f"\nTimestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph:.4f}$")
     print(table)
 
     # Write the table and timestamp to a text file
     with open(output_file, 'a') as f:
-        f.write(f"Timestamp: {timestamp}, Difficulty: {mean_difficulty}\n{table}\n")
+        f.write(f"Timestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph:.4f}$\n{table}\n")
     print(f"Table also written to {output_file}")
 
 
