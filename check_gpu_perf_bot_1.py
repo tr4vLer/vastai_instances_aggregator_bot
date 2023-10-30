@@ -54,6 +54,10 @@ def instance_list():
 
         # Print information about each instance
         logging.info("Your Instances:")
+        
+        # Additional variables to store the total_dph for running machines        
+        total_dph_running_machines = 0
+        
         for instance in instances:
             instance_id = instance.get('id', 'N/A')
             gpu_name = instance.get('gpu_name', 'N/A')
@@ -61,12 +65,16 @@ def instance_list():
             ssh_host = instance.get('ssh_host', 'N/A')
             ssh_port = instance.get('ssh_port', 'N/A')
             num_gpus = instance.get('num_gpus', 'N/A')
+            cur_state = instance.get('cur_state', 'N/A')
+            if cur_state.lower() == 'running':
+                total_dph_running_machines += float(dph_total)
 
             logging.info("Instance ID: %s", instance_id)
             logging.info("GPU Name: %s", gpu_name)
             logging.info("Dollars Per Hour (DPH): %s", dph_total)
             logging.info("SSH Command: ssh -p %s root@%s -L 8080:localhost:8080", ssh_port, ssh_host)
             logging.info("Number of GPUs: %s", num_gpus)
+            logging.info("Current state: %s", cur_state)
             logging.info("-" * 30)
 
             ssh_info = {
@@ -75,14 +83,15 @@ def instance_list():
                 'dph_total': dph_total,
                 'ssh_host': ssh_host,
                 'ssh_port': ssh_port,
-                'num_gpus': num_gpus
+                'num_gpus': num_gpus,
+                'cur_state': cur_state
             }
             ssh_info_list.append(ssh_info)
 
     else:
         logging.error("Failed to retrieve instances. Status code: %s. Response: %s", response.status_code, response.text)
 
-    return ssh_info_list
+    return ssh_info_list, total_dph_running_machines
 
 def clean_ansi_codes(input_string):
     ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]', re.IGNORECASE)
@@ -135,7 +144,7 @@ def get_log_info(ssh_host, ssh_port, username):
 
 
 from prettytable import PrettyTable      
-def print_table(data, mean_difficulty, average_dollars_per_normal_block, output_file='table_output.txt'):
+def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, output_file='table_output.txt'):
     # Define the table and its columns
     table = PrettyTable()
     table.field_names = ["Instance ID", "GPU Name", "GPU count", "HashRate (h/s)", "DPH", "XNM Blocks", "Runtime (hours)", "Block/h", "$/Blocks"]
@@ -149,12 +158,12 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, output_
 
     # Print the table
     if mean_difficulty is not None:
-        print(f"\nTimestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$")
+        print(f"\nTimestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$")
     print(table)
 
     # Write the table and timestamp to a text file
     with open(output_file, 'a') as f:
-        f.write(f"Timestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$\n{table}\n")
+        f.write(f"Timestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$\n{table}\n")
     print(f"Table also written to {output_file}")
 
 
@@ -162,7 +171,7 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, output_
 test_api_connection()
 
 # List Instances and Get SSH Information
-ssh_info_list = instance_list()
+ssh_info_list, total_dph_running_machines = instance_list()
 username = "root"
 
 # Store the data for the table
@@ -177,6 +186,7 @@ for ssh_info in ssh_info_list:
     instance_id = ssh_info['instance_id']
     gpu_name = ssh_info['gpu_name']
     num_gpus = ssh_info['num_gpus']
+    cur_state = ssh_info['cur_state']    
     dph_total = float(ssh_info['dph_total'])  # Convert DPH to float for calculations
     dph_values.append(dph_total)
     ssh_host = ssh_info['ssh_host']
@@ -223,7 +233,6 @@ for ssh_info in ssh_info_list:
         total_dph = sum(dph_values)
     else:
         logging.info("No valid DPH values were found.")
-
     if dollars_per_normal_block_values:
         average_dollars_per_normal_block = sum(dollars_per_normal_block_values) / len(dollars_per_normal_block_values)
     else:
@@ -234,7 +243,7 @@ for ssh_info in ssh_info_list:
 table_data.sort(key=lambda x: x[8] if x[8] is not None else float('-inf'))
 
 # Print the table
-print_table(table_data, mean_difficulty, average_dollars_per_normal_block)
+print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines)
 
 # Exit the script
 sys.exit()
