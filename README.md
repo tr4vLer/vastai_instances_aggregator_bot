@@ -1,4 +1,5 @@
 # VASTAI GPU Performance Aggregator for XENGPUMiners
+![image](https://github.com/tr4vLer/vastai_performance_bot/assets/149298759/03ae681b-98e0-4114-a4aa-5e2b3033c240)
 
 ## Prerequisites
 Using Jozef's oneliner is highly recommended for building your miner on a Vast.ai instance. Follow his guidelines [here](https://github.com/JozefJarosciak/xgpu). 
