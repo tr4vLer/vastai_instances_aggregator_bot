@@ -42,7 +42,7 @@ Use your terminal or PowerShell to install the following requirements:
 - Ensure that you keep your private key secure and do not share it.
 
 
-# How to Run VASTAI GPU Performance Aggregator Script?
+# How to Run VASTAI GPU Performance Aggregator?
 
 ### For Windows:
 1. Download and unpack this repository.
