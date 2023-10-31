@@ -65,8 +65,8 @@ def instance_list():
             ssh_host = instance.get('ssh_host', 'N/A')
             ssh_port = instance.get('ssh_port', 'N/A')
             num_gpus = instance.get('num_gpus', 'N/A')
-            cur_state = instance.get('cur_state', 'N/A')
-            if cur_state.lower() == 'running':
+            actual_status = instance.get('actual_status', 'N/A')
+            if actual_status.lower() == 'running':
                 total_dph_running_machines += float(dph_total)
 
             logging.info("Instance ID: %s", instance_id)
@@ -74,7 +74,7 @@ def instance_list():
             logging.info("Dollars Per Hour (DPH): %s", dph_total)
             logging.info("SSH Command: ssh -p %s root@%s -L 8080:localhost:8080", ssh_port, ssh_host)
             logging.info("Number of GPUs: %s", num_gpus)
-            logging.info("Current state: %s", cur_state)
+            logging.info("Current state: %s", actual_status)
             logging.info("-" * 30)
 
             ssh_info = {
@@ -84,7 +84,7 @@ def instance_list():
                 'ssh_host': ssh_host,
                 'ssh_port': ssh_port,
                 'num_gpus': num_gpus,
-                'cur_state': cur_state
+                'actual_status': actual_status
             }
             ssh_info_list.append(ssh_info)
 
@@ -98,7 +98,8 @@ def clean_ansi_codes(input_string):
     return ansi_escape.sub('', input_string)
 
 def get_log_info(ssh_host, ssh_port, username):
-    private_key_path = "/home/admin/.ssh/id_ed25519"
+    #private_key_path = "/home/admin/.ssh/id_ed25519"
+    private_key_path = r"C:/Users/admin/.ssh/id_ed25519"
     
     # Create an SSH client
     ssh = paramiko.SSHClient()
@@ -120,23 +121,24 @@ def get_log_info(ssh_host, ssh_port, username):
         last_line = clean_ansi_codes(last_line)
         
         # Parse the last line to get the required information
-        pattern = re.compile(r'Mining:.*\[(\d+):(\d+):(\d+),.*(?:\? Blocks/s|.*(?:Details=normal:(\d+)|Details=xuni:(\d+))).*HashRate:(\d+.\d+).*Difficulty=(\d+).*\]')
+        pattern = re.compile(r'Mining:.*\[(\d+):(\d+):(\d+),.*(?:\? Blocks/s|.*(?:Details=super:(\d+)|Details=normal:(\d+)|Details=xuni:(\d+))).*HashRate:(\d+.\d+).*Difficulty=(\d+).*\]')
         match = pattern.search(last_line)
         if match:
             # Extracting the running time and blocks information
-            hours, minutes, seconds, normal_blocks, xuni_blocks, hash_rate, difficulty = match.groups()
+            hours, minutes, seconds, super_blocks, normal_blocks, xuni_blocks, hash_rate, difficulty = match.groups()
 
+            super_blocks = int(super_blocks) if super_blocks is not None else 0
             normal_blocks = int(normal_blocks) if normal_blocks is not None else 0
             xuni_blocks = int(xuni_blocks) if xuni_blocks is not None else 0
 
-            return int(hours), int(minutes), int(seconds), normal_blocks, xuni_blocks, float(hash_rate), int(difficulty)
+            return int(hours), int(minutes), int(seconds), super_blocks, normal_blocks, xuni_blocks, float(hash_rate), int(difficulty)
         else:
             logging.error("Failed to parse the log line")
-            return None, None, None, None, None, None, None
+            return None, None, None, None, None, None, None, None
         
     except Exception as e:
         logging.error("Failed to connect or retrieve log info: %s", e)
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None
     
     finally:
         ssh.close()
@@ -144,10 +146,11 @@ def get_log_info(ssh_host, ssh_port, username):
 
 
 from prettytable import PrettyTable      
-def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, output_file='table_output.txt'):
+def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, output_file='table_output.txt'):
     # Define the table and its columns
     table = PrettyTable()
-    table.field_names = ["Instance ID", "GPU Name", "GPU count", "HashRate (h/s)", "DPH", "XNM Blocks", "Runtime (hours)", "Block/h", "$/Blocks"]
+    table.field_names = ["Instance ID", "GPU Name", "GPU's", "USD/h", "USD/GPU", "Instance h/s", "GPU h/s", "XNM Blocks", "Runtime", "Block/h", "h/s/USD", "USD/Block"]
+
     
     # Add rows to the table to console
     for row in data:
@@ -158,12 +161,12 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_d
 
     # Print the table
     if mean_difficulty is not None:
-        print(f"\nTimestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$")
+        print(f"\nTimestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f} h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$")
     print(table)
 
     # Write the table and timestamp to a text file
     with open(output_file, 'a') as f:
-        f.write(f"Timestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f}h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$\n{table}\n")
+        f.write(f"Timestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f} h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$\n{table}\n")
     print(f"Table also written to {output_file}")
 
 
@@ -186,15 +189,24 @@ for ssh_info in ssh_info_list:
     instance_id = ssh_info['instance_id']
     gpu_name = ssh_info['gpu_name']
     num_gpus = ssh_info['num_gpus']
-    cur_state = ssh_info['cur_state']    
+    actual_status = ssh_info['actual_status']    
     dph_total = float(ssh_info['dph_total'])  # Convert DPH to float for calculations
     dph_values.append(dph_total)
     ssh_host = ssh_info['ssh_host']
     ssh_port = ssh_info['ssh_port']
 
     logging.info("Fetching log info for instance ID: %s", instance_id)
-    hours, minutes, seconds, normal_blocks, xuni_blocks, hash_rate, difficulty = get_log_info(ssh_host, ssh_port, username)
-    
+    hours, minutes, seconds, super_blocks, normal_blocks, xuni_blocks, hash_rate, difficulty = get_log_info(ssh_host, ssh_port, username)
+
+    if num_gpus != 'N/A' and dph_total != 'N/A':
+        usd_per_gpu = round(dph_total / float(num_gpus), 4)
+    else:
+        usd_per_gpu = 'N/A'
+    if dph_total != 'N/A' and hash_rate is not None:
+        hash_rate_per_usd = round(hash_rate / dph_total, 2)
+    else:
+        hash_rate_per_usd = 'N/A'        
+   
     if difficulty is not None and difficulty != 0:
         difficulties.append(difficulty)
     if hash_rate is not None and hash_rate != 0:
@@ -216,7 +228,9 @@ for ssh_info in ssh_info_list:
         else:
             dollars_per_normal_block = 0
         
-        table_data.append([instance_id, gpu_name, num_gpus, round(hash_rate, 2), round(dph_total, 4), normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(dollars_per_normal_block, 2)])        
+        hash_rate_per_gpu = hash_rate / float(num_gpus) if num_gpus != 'N/A' and hash_rate is not None else 'N/A'
+        
+        table_data.append([instance_id, gpu_name, num_gpus, round(dph_total, 4), round(usd_per_gpu, 4), round(hash_rate, 2), round(hash_rate_per_gpu, 2), normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(hash_rate_per_usd, 2), round(dollars_per_normal_block, 2)])        
     else:
         logging.error("Failed to retrieve log information or normal blocks is None for instance ID: %s", instance_id)
 
@@ -240,10 +254,10 @@ for ssh_info in ssh_info_list:
         logging.info("No valid $/Block values were found.")
 
 # Sort the data by "Blocks/$" in increasing order
-table_data.sort(key=lambda x: x[8] if x[8] is not None else float('-inf'))
+table_data.sort(key=lambda x: x[11] if x[11] is not None else float('-inf'))
 
 # Print the table
-print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines)
+print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd)
 
 # Exit the script
 sys.exit()
