@@ -5,7 +5,59 @@ import re
 import sys
 import datetime
 
+####### User configuration ####### 
+
+# Path to your API key. 
+# Default: 'api_key.txt' (Assumes the API key file is located in the same folder as this script).
+# Update this path if your API key file is located elsewhere.
 API_KEY_FILE = 'api_key.txt'
+
+# SSH Key Configuration:
+# In order to securely connect to Vast.ai instances, you need to generate an SSH key pair.
+# Follow these steps:
+#   1. Open a terminal (Linux/Mac) or Command Prompt/Powershell (Windows).
+#   2. Run the following command to generate a new SSH key pair:
+#      ssh-keygen -t ed25519
+#   3. When prompted, press Enter to save the key pair into the default directory. If you prefer a different location, provide the path.
+#   4. If you wish, provide a passphrase for additional security when prompted; otherwise, press Enter to skip.
+#   5. Once generated, your private key will be saved to a file (by default, it's id_ed25519 in your ~/.ssh/ directory).
+#   6. Your public key will be saved to a file with the same name but with .pub extension (by default, it's id_ed25519.pub).
+#   7. Open the public key file with a text editor, copy its content, and paste it into the SSH Keys section on https://cloud.vast.ai/account/.
+#      The content of the public key should look something like this example:
+#      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK0wmN/Cr3JXqmLW7u+g9pTh+wyqDHpSQEIQczXkVx9q"
+#   8. Ensure that you keep your private key secure and do not share it.
+
+# Now, set the path to your private SSH key here. 
+# Instructions: 
+#   - Windows: Use a raw string (prefix the string with 'r') to ensure backslashes are treated literally, not as escape characters.
+#   - Linux/Mac: Use a standard string with forward slashes.
+# Example for Windows: r"C:/Users/your_username/.ssh/id_ed25519"
+# Example for Linux/Mac: "/home/your_username/.ssh/id_ed25519"
+# Example for Mac: "/Users/your_username/.ssh/id_ed25519"
+private_key_path = r"C:/Users/your_username/.ssh/id_ed25519"
+
+# If your private SSH key is protected by a passphrase, provide it here.
+# If not, leave this as an empty string ("").
+# Example: passphrase = "your_passphrase"
+passphrase = ""
+
+####### Table printout configuration ####### 
+
+# Column index by which the table should be sorted.
+# Note: Column indices start at 0. So, for example, to sort by the first column, set this value to 0.
+# Default: 11 (Assumes "USD/Block" to sort by.)
+sort_column_index = 11
+
+# Order in which the table should be sorted.
+# Options: 
+#   - 'ascending': Sort from smallest to largest.
+#   - 'descending': Sort from largest to smallest.
+# Default: 'ascending'
+sort_order = 'ascending'
+
+####### End of user configuration ####### 
+
+
 
 # Logging Configuration
 logging.basicConfig(level=logging.INFO,
@@ -98,16 +150,14 @@ def clean_ansi_codes(input_string):
     return ansi_escape.sub('', input_string)
 
 def get_log_info(ssh_host, ssh_port, username):
-    #private_key_path = "/home/admin/.ssh/id_ed25519"
-    private_key_path = r"C:/Users/admin/.ssh/id_ed25519"
-    
+
     # Create an SSH client
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     
     try:
         # Load the private key
-        key = paramiko.Ed25519Key(filename=private_key_path)
+        key = paramiko.Ed25519Key(filename=private_key_path, password=passphrase)
         
         # Connect to the server
         ssh.connect(ssh_host, port=ssh_port, username=username, pkey=key)
@@ -142,7 +192,6 @@ def get_log_info(ssh_host, ssh_port, username):
     
     finally:
         ssh.close()
-
 
 
 from prettytable import PrettyTable      
@@ -254,7 +303,11 @@ for ssh_info in ssh_info_list:
         logging.info("No valid $/Block values were found.")
 
 # Sort the data by "Blocks/$" in increasing order
-table_data.sort(key=lambda x: x[11] if x[11] is not None else float('-inf'))
+if sort_column_index < 0 or sort_column_index >= len(table_data[0]):
+    print("Invalid sort_column_index: {}. Must be between 0 and {}.".format(sort_column_index, len(table_data[0])-1))
+else:
+    table_data.sort(key=lambda x: (x[sort_column_index] if x[sort_column_index] is not None else float('-inf'), x), 
+                    reverse=(sort_order == 'descending'))
 
 # Print the table
 print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd)
