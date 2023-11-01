@@ -173,20 +173,24 @@ def get_log_info(ssh_host, ssh_port, username):
         last_line = clean_ansi_codes(last_line)
         
         # Parse the last line to get the required information
-        pattern = re.compile(r'Mining:.*\[(?:(\d+):)?(\d+):(\d+),.*(?:Blocks/s|.*(?:Details=(?:super:(\d+)|normal:(\d+)|xuni:(\d+)))).*HashRate:(\d+\.\d+).*Difficulty=(\d+).*\]')
+        pattern = re.compile(r'Mining:.*\[(?:(\d+):)?(\d+):(\d+)(?:\.\d+)?,.*?(?:Details=(?:(?:super:(\d+)\s)?normal:(\d+)|xuni:(\d+)).*?)?HashRate:(\d+\.\d+).*Difficulty=(\d+)')
         match = pattern.search(last_line)
         if match:
             # Extracting the running time and blocks information
             hours, minutes, seconds, super_blocks, normal_blocks, xuni_blocks, hash_rate, difficulty = match.groups()
             
             hours = int(hours) if hours is not None else 0
+            minutes = int(minutes)
+            seconds = int(seconds)
             super_blocks = int(super_blocks) if super_blocks is not None else 0
             normal_blocks = int(normal_blocks) if normal_blocks is not None else 0
             xuni_blocks = int(xuni_blocks) if xuni_blocks is not None else 0
-
-            return int(hours), int(minutes), int(seconds), super_blocks, normal_blocks, xuni_blocks, float(hash_rate), int(difficulty)
+            hash_rate = float(hash_rate)
+            difficulty = int(difficulty)
+    
+            return hours, minutes, seconds, super_blocks, normal_blocks, xuni_blocks, hash_rate, difficulty
         else:
-            logging.error("Failed to parse the log line")
+            logging.error("Failed to parse the log line: %s", last_line)
             return None, None, None, None, None, None, None, None
         
     except Exception as e:
