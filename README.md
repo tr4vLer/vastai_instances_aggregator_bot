@@ -48,22 +48,22 @@ Use your terminal or PowerShell to install the following requirements:
 1. Download and unpack this repository.
 2. Open `check_gpu_perf_bot_1.py` in a text editor (e.g., Notepad++) and edit **Line 37** with the path for your SSH key. Follow the detailed instructions included there.
 3. Edit `api_key.txt` with your Vast.ai API key. The key should be all the file contains. Find your API key on [https://cloud.vast.ai/account/](https://cloud.vast.ai/account/).
-4. Open PowerShell, navigate to the folder with the repository (Example command: `cd C:\Users\user_name\Desktop\vastai_performance_bot-main`), and press Enter.
+4. Open PowerShell, navigate to the folder with the repository (Example command: `cd C:\Users\user_name\Desktop\vastai_instances_aggregator_bot-main`), and press Enter.
 5. Run the script with the command:
    
    ```powershell
-   python check_gpu_perf_bot_1.py
+   vastai_instances_aggregator_bot.py
 
 ### For MacOS/Linux:
 1. Open your command line and execute the following to download the repository and set permissions:
 
    ```sh
-   git clone https://github.com/tr4vLer/vastai_performance_bot.git && cd vastai_performance_bot && chmod 600 api_key.txt && chmod +x check_gpu_perf_bot_1.py
+   git clone https://github.com/tr4vLer/vastai_instances_aggregator_bot.git && cd vastai_instances_aggregator_bot && chmod 600 api_key.txt && chmod +x vastai_instances_aggregator_bot.py
 3. Edit api_key.txt with your Vast.ai API key. The key should be all the file contains. Find your API key on https://cloud.vast.ai/account/. Optionally, use `sudo nano api_key.txt` from the command line.
 Run the script with the command:
 
    ```sh
-    sudo sh -c 'nohup python3 check_gpu_perf_bot_1.py > debug_output.log 2>&1 &' && tail -f debug_output.log
+    sudo sh -c 'nohup python3 vastai_instances_aggregator_bot.py > debug_output.log 2>&1 &' && tail -f debug_output.log
 
 ### Disclaimer
 Am not porgrammer and code is far from perfect. Its just for fun. 
