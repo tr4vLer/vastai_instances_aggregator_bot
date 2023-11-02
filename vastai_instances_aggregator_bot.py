@@ -38,7 +38,7 @@ API_KEY_FILE = 'api_key.txt'
 # Example for Windows: r"C:/Users/your_username/.ssh/id_ed25519"
 # Example for Linux: "/home/your_username/.ssh/id_ed25519"
 # Example for Mac: "/Users/your_username/.ssh/id_ed25519"
-private_key_path = r"C:/Users/your_username/.ssh/id_ed25519"
+private_key_path = r"C:/Users/user_name/.ssh/id_ed25519"
 
 # If your private SSH key is protected by a passphrase, provide it here.
 # If not, leave this as an empty string ("").
@@ -306,7 +306,7 @@ for ssh_info in ssh_info_list:
         else:
             hash_rate_per_gpu = 'N/A'
         
-        table_data.append([instance_id, gpu_name, num_gpus, round(dph_total, 4), round(usd_per_gpu, 4), round(hash_rate, 2), round(hash_rate_per_gpu, 2), normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(hash_rate_per_usd, 2), round(dollars_per_normal_block, 2), label])        
+        table_data.append([instance_id, gpu_name, num_gpus, round(dph_total, 4), round(usd_per_gpu, 4), hash_rate, hash_rate_per_gpu, normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(hash_rate_per_usd, 2), round(dollars_per_normal_block, 2), label])        
     else:
         logging.error("Failed to retrieve log information or normal blocks is None for instance ID: %s", instance_id)
 
@@ -362,23 +362,26 @@ performances = defaultdict(lambda: {'best': [], 'bottom': []})
 # Calculating mean and standard deviation for each GPU type
 stats = {}
 
+instance_gpu_mapping = {row[0]: (row[1], row[6]) for row in table_data}
 for gpu_type, hash_rates in gpu_hash_rates.items():
     if len(hash_rates) > 1:
         average_hash_rate = np.mean(hash_rates)
         std_dev_hash_rate = np.std(hash_rates)
         stats[gpu_type] = {"mean": average_hash_rate, "std_dev": std_dev_hash_rate}
         
-        for instance_data, hash_rate_per_gpu in zip(table_data, hash_rates):
-            if hash_rate_per_gpu != 'N/A':
-                z_score = (hash_rate_per_gpu - average_hash_rate) / std_dev_hash_rate
-                if abs(z_score) > threshold:
-                    outliers[gpu_type].append((instance_data[0], hash_rate_per_gpu))
-                if z_score > 0:
-                    percentage_above_mean = (hash_rate_per_gpu / average_hash_rate - 1) * 100
-                    performances[gpu_type]['best'].append((instance_data[0], hash_rate_per_gpu, percentage_above_mean))
-                elif z_score < 0:
-                    percentage_below_mean = (1 - hash_rate_per_gpu / average_hash_rate) * 100
-                    performances[gpu_type]['bottom'].append((instance_data[0], hash_rate_per_gpu, percentage_below_mean))
+        # Calculate outliers and performances based on actual data per GPU type
+        for instance_id, (instance_gpu_type, instance_hash_rate) in instance_gpu_mapping.items():
+            if instance_gpu_type == gpu_type:  # Ensure we're looking at the correct GPU type
+                if instance_hash_rate != 'N/A':
+                    z_score = (instance_hash_rate - average_hash_rate) / std_dev_hash_rate
+                    if abs(z_score) > threshold:
+                        outliers[gpu_type].append((instance_id, instance_hash_rate))
+                    if z_score > 0:
+                        percentage_above_mean = (instance_hash_rate / average_hash_rate - 1) * 100
+                        performances[gpu_type]['best'].append((instance_id, instance_hash_rate, percentage_above_mean))
+                    elif z_score < 0:
+                        percentage_below_mean = (1 - instance_hash_rate / average_hash_rate) * 100
+                        performances[gpu_type]['bottom'].append((instance_id, instance_hash_rate, percentage_below_mean))
     else:
         print(f"Not enough data to calculate hash outliers for GPU type {gpu_type}")
 
