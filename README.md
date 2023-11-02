@@ -16,12 +16,12 @@ Use your terminal or PowerShell to install the following requirements:
 - **Linux/MacOS:**
   ```sh
   sudo apt update
-  pip install requests paramiko prettytable
+  pip install requests paramiko prettytable numpy defaultdict
   
 - **Windows:**
      ```sh
     python -m pip install --upgrade pip setuptools wheel
-    pip install requests paramiko prettytable
+    pip install requests paramiko prettytable numpy defaultdict
 
    
 ## Generate SSH Key and Configure Vast.ai Account
