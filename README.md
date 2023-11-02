@@ -46,7 +46,7 @@ Use your terminal or PowerShell to install the following requirements:
 
 ### For Windows:
 1. Download and unpack this repository.
-2. Open `check_gpu_perf_bot_1.py` in a text editor (e.g., Notepad++) and edit **Line 37** with the path for your SSH key. Follow the detailed instructions included there.
+2. Open `vastai_instances_aggregator_bot.py` in a text editor (e.g., Notepad++) and edit **Line 37** with the path for your SSH key. Follow the detailed instructions included there.
 3. Edit `api_key.txt` with your Vast.ai API key. The key should be all the file contains. Find your API key on [https://cloud.vast.ai/account/](https://cloud.vast.ai/account/).
 4. Open PowerShell, navigate to the folder with the repository (Example command: `cd C:\Users\user_name\Desktop\vastai_instances_aggregator_bot-main`), and press Enter.
 5. Run the script with the command:
