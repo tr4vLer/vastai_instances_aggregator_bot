@@ -52,7 +52,7 @@ Use your terminal or PowerShell to install the following requirements:
 5. Run the script with the command:
    
    ```powershell
-   vastai_instances_aggregator_bot.py
+   python vastai_instances_aggregator_bot.py
 
 ### For MacOS/Linux:
 1. Open your command line and execute the following to download the repository and set permissions:
