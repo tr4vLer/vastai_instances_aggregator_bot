@@ -4,6 +4,10 @@ import paramiko
 import re
 import sys
 import datetime
+from prettytable import PrettyTable 
+from collections import defaultdict
+import numpy as np
+
 
 ####### User configuration ####### 
 
@@ -34,7 +38,7 @@ API_KEY_FILE = 'api_key.txt'
 # Example for Windows: r"C:/Users/your_username/.ssh/id_ed25519"
 # Example for Linux: "/home/your_username/.ssh/id_ed25519"
 # Example for Mac: "/Users/your_username/.ssh/id_ed25519"
-private_key_path = r"C:/Users/user_name/.ssh/id_ed25519"
+private_key_path = r"C:/Users/your_username/.ssh/id_ed25519"
 
 # If your private SSH key is protected by a passphrase, provide it here.
 # If not, leave this as an empty string ("").
@@ -200,9 +204,8 @@ def get_log_info(ssh_host, ssh_port, username):
     finally:
         ssh.close()
 
-
-from prettytable import PrettyTable      
-def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, output_file='table_output.txt'):
+     
+def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, output_file='table_output.txt'):
     # Define the table and its columns
     table = PrettyTable()
     table.field_names = ["Instance ID", "GPU Name", "GPU's", "USD/h", "USD/GPU", "Instance h/s", "GPU h/s", "XNM Blocks", "Runtime", "Block/h", "h/s/USD", "USD/Block", "Label"]
@@ -217,13 +220,13 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_d
 
     # Print the table
     if mean_difficulty is not None:
-        print(f"\nTimestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f} h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$")
+        print(f"\nTimestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f} h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$, Total Blocks/h: {sum_normal_block_per_hour:.2f}")
     print(table)
 
     # Write the table and timestamp to a text file
     with open(output_file, 'a') as f:
-        f.write(f"Timestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f} h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$\n{table}\n")
-    print(f"Table also written to {output_file}")
+        f.write(f"Timestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f} h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$, Total Blocks/h: {sum_normal_block_per_hour:.2f}\n{table}\n")
+    print(f"Table also written to {output_file}\n")
 
 
 # Test API Connection
@@ -233,12 +236,17 @@ test_api_connection()
 ssh_info_list, total_dph_running_machines = instance_list()
 username = "root"
 
-# Store the data for the table
-table_data = []
+
+
+# Initialize Data Storage
+gpu_hash_rates = defaultdict(list)
+dph_values = []
 difficulties = []
 hash_rates = []
-dph_values = []
 dollars_per_normal_block_values = []
+sum_normal_block_per_hour = 0
+table_data = []
+
 
 # Fetch Log Information for Each Instance
 for ssh_info in ssh_info_list:
@@ -275,8 +283,13 @@ for ssh_info in ssh_info_list:
         logging.info("Normal Blocks: %d", normal_blocks)
         logging.info("HashRate: %.2f", hash_rate)
 
-        # Calculate Block/h and handle the case when runtime is zero
-        normal_block_per_hour = normal_blocks / runtime_hours if runtime_hours != 0 else 0
+        # Calculate Block/h, sum it and handle the case when runtime is zero
+        if runtime_hours != 0:
+            normal_block_per_hour = normal_blocks / runtime_hours
+            # Update sum
+            sum_normal_block_per_hour += normal_block_per_hour
+        else:
+            normal_block_per_hour = 0
 
         # Calculate $/Blocks and handle the case when the number of blocks is zero
         if normal_blocks != 0:
@@ -286,6 +299,12 @@ for ssh_info in ssh_info_list:
             dollars_per_normal_block = 0
         
         hash_rate_per_gpu = hash_rate / float(num_gpus) if num_gpus != 'N/A' and hash_rate is not None else 'N/A'
+        
+        if hash_rate is not None and hash_rate != 0 and num_gpus != 'N/A':
+            hash_rate_per_gpu = hash_rate / float(num_gpus)
+            gpu_hash_rates[gpu_name].append(hash_rate_per_gpu)
+        else:
+            hash_rate_per_gpu = 'N/A'
         
         table_data.append([instance_id, gpu_name, num_gpus, round(dph_total, 4), round(usd_per_gpu, 4), round(hash_rate, 2), round(hash_rate_per_gpu, 2), normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(hash_rate_per_usd, 2), round(dollars_per_normal_block, 2), label])        
     else:
@@ -310,19 +329,76 @@ for ssh_info in ssh_info_list:
         average_dollars_per_normal_block = None
         logging.info("No valid $/Block values were found.")
 
-# Sort the data by "Blocks/$" in increasing order
+# Sort the data by "<column_name>" in asc or desc order
     if not table_data:
         print("Error: table_data is empty!")
     elif sort_column_index < 0 or (table_data and sort_column_index >= len(table_data[0])):
         print("Invalid sort_column_index: {}. Must be between 0 and {}.".format(sort_column_index, len(table_data[0])-1 if table_data else 'N/A'))
     else:
-        if all(len(row) > sort_column_index for row in table_data):
-            table_data.sort(key=lambda x: (x[sort_column_index] if x[sort_column_index] is not None else float('-inf'), x), 
-                            reverse=(sort_order == 'descending'))
+        # Ensure all rows have the same number of columns
+        num_columns = len(table_data[0])
+        if all(len(row) == num_columns for row in table_data):
+            try:
+                # Convert the sort column to float if possible for proper numeric sorting
+                table_data.sort(key=lambda x: (float(x[sort_column_index]) if x[sort_column_index] not in (None, 'N/A') else float('-inf'), x), 
+                                reverse=(sort_order == 'descending'))
+            except ValueError:
+                # Fallback to string sorting if conversion to float is not possible
+                table_data.sort(key=lambda x: (x[sort_column_index] if x[sort_column_index] not in (None, 'N/A') else '', x), 
+                                reverse=(sort_order == 'descending'))
         else:
-            print("Error: Not all rows have enough columns for sort_column_index {}".format(sort_column_index))
+            print("Error: Not all rows have the same number of columns.")
+    
+
 # Print the table
-print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label)
+print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour)
+
+
+# Calculate Outliers
+threshold = 1
+outliers = defaultdict(list)
+performances = defaultdict(lambda: {'best': [], 'bottom': []})
+
+# Calculating mean and standard deviation for each GPU type
+stats = {}
+
+for gpu_type, hash_rates in gpu_hash_rates.items():
+    if len(hash_rates) > 1:
+        average_hash_rate = np.mean(hash_rates)
+        std_dev_hash_rate = np.std(hash_rates)
+        stats[gpu_type] = {"mean": average_hash_rate, "std_dev": std_dev_hash_rate}
+        
+        for instance_data, hash_rate_per_gpu in zip(table_data, hash_rates):
+            if hash_rate_per_gpu != 'N/A':
+                z_score = (hash_rate_per_gpu - average_hash_rate) / std_dev_hash_rate
+                if abs(z_score) > threshold:
+                    outliers[gpu_type].append((instance_data[0], hash_rate_per_gpu))
+                if z_score > 0:
+                    percentage_above_mean = (hash_rate_per_gpu / average_hash_rate - 1) * 100
+                    performances[gpu_type]['best'].append((instance_data[0], hash_rate_per_gpu, percentage_above_mean))
+                elif z_score < 0:
+                    percentage_below_mean = (1 - hash_rate_per_gpu / average_hash_rate) * 100
+                    performances[gpu_type]['bottom'].append((instance_data[0], hash_rate_per_gpu, percentage_below_mean))
+    else:
+        print(f"Not enough data to calculate hash outliers for GPU type {gpu_type}")
+
+
+# Print Outliers
+print(f"+-------------------------------------------------------------------+---ID---+---h/s--+---%--+")  
+for gpu_type, performance_data in performances.items():
+    bottom_performers = performance_data['bottom']
+     
+    if bottom_performers:
+        mean = stats[gpu_type]["mean"]
+        std_dev = stats[gpu_type]["std_dev"]
+        
+        # Rounding numbers in bottom_performers
+        rounded_bottom_performers = [(ID, round(h_rate, 2), round(pct_below_mean, 2)) for ID, h_rate, pct_below_mean in bottom_performers]
+        
+        print(f"Hash stats for group of {gpu_type}#\n -- Mean h/s: {mean:.2f}, Standard deviation: {std_dev:.2f}, Worst performers: {rounded_bottom_performers}\n")
+        outliers[gpu_type].extend(rounded_bottom_performers)
+
+
 
 # Exit the script
 sys.exit()
