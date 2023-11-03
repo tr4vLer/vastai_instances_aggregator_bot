@@ -1,1 +1,1 @@
-paste your API key https://cloud.vast.ai/account/
+paste_API_key
