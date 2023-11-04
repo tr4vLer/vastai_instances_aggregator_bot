@@ -38,7 +38,7 @@ API_KEY_FILE = 'api_key.txt'
 # Example for Windows: r"C:/Users/your_username/.ssh/id_ed25519"
 # Example for Linux: "/home/your_username/.ssh/id_ed25519"
 # Example for Mac: "/Users/your_username/.ssh/id_ed25519"
-private_key_path = r"C:/Users/user_name/.ssh/id_ed25519"
+private_key_path = r"C:/Users/your_username/.ssh/id_ed25519"
 
 # If your private SSH key is protected by a passphrase, provide it here.
 # If not, leave this as an empty string ("").
@@ -58,6 +58,16 @@ sort_column_index = 11
 #   - 'descending': Sort from largest to smallest.
 # Default: 'ascending'
 sort_order = 'ascending'
+
+####### Outliers configuration ####### 
+
+# Think of the Z-Score as a "performance alert" level for your GPUs.
+# It helps you spot GPUs that aren't performing as well as you expect, compared to the group average.
+# The Z-Score measures how far a GPU's performance is from the average, in terms of group's standard deviation.
+# Setting a lower threshold means you're tightening the criteria and will get alerts for smaller deviations from the average.
+# A default threshold of 2 indicates GPUs that performing 2x standard deviations below the group average
+# It's a way to catch the biggest concerns without too many false alarms. Adjust the threshold to find the best balance for your monitoring needs.
+threshold = 2
 
 ####### End of user configuration ####### 
 
@@ -355,9 +365,9 @@ print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total
 
 
 # Calculate Outliers
-threshold = 1
 outliers = defaultdict(list)
-performances = defaultdict(lambda: {'best': [], 'bottom': []})
+performances = defaultdict(lambda: {'bottom': []})
+highlighted_outliers = defaultdict(list)
 
 # Calculating mean and standard deviation for each GPU type
 stats = {}
@@ -366,42 +376,42 @@ instance_gpu_mapping = {row[0]: (row[1], row[6]) for row in table_data}
 for gpu_type, hash_rates in gpu_hash_rates.items():
     if len(hash_rates) > 1:
         average_hash_rate = np.mean(hash_rates)
-        std_dev_hash_rate = np.std(hash_rates)
+        std_dev_hash_rate = np.std(hash_rates, ddof=1)  # Set 'ddof=1' for sample standard deviation
         stats[gpu_type] = {"mean": average_hash_rate, "std_dev": std_dev_hash_rate}
-        
+
         # Calculate outliers and performances based on actual data per GPU type
         for instance_id, (instance_gpu_type, instance_hash_rate) in instance_gpu_mapping.items():
-            if instance_gpu_type == gpu_type:  # Ensure we're looking at the correct GPU type
-                if instance_hash_rate != 'N/A':
-                    z_score = (instance_hash_rate - average_hash_rate) / std_dev_hash_rate
-                    if abs(z_score) > threshold:
-                        outliers[gpu_type].append((instance_id, instance_hash_rate))
-                    if z_score > 0:
-                        percentage_above_mean = (instance_hash_rate / average_hash_rate - 1) * 100
-                        performances[gpu_type]['best'].append((instance_id, instance_hash_rate, percentage_above_mean))
-                    elif z_score < 0:
-                        percentage_below_mean = (1 - instance_hash_rate / average_hash_rate) * 100
-                        performances[gpu_type]['bottom'].append((instance_id, instance_hash_rate, percentage_below_mean))
-    else:
-        print(f"Not enough data to calculate hash outliers for GPU type {gpu_type}")
+            if instance_gpu_type == gpu_type and instance_hash_rate != 'N/A':
+                instance_hash_rate = float(instance_hash_rate)
+                z_score = (instance_hash_rate - average_hash_rate) / std_dev_hash_rate
+                if z_score < -threshold:
+                    highlighted_outliers[gpu_type].append((instance_id, instance_hash_rate, z_score))
 
-
-# Print Outliers
-print(f"+-------------------------------------------------------------------+---ID---+---h/s--+---%--+")  
-for gpu_type, performance_data in performances.items():
-    bottom_performers = performance_data['bottom']
-     
-    if bottom_performers:
+# Print Outliers and Stats
+insufficient_data_messages = []  # List to store messages for insufficient data
+for gpu_type in gpu_hash_rates.keys():  # Iterate through all GPU types
+    if gpu_type in stats:
         mean = stats[gpu_type]["mean"]
         std_dev = stats[gpu_type]["std_dev"]
-        
-        # Rounding numbers in bottom_performers
-        rounded_bottom_performers = [(ID, round(h_rate, 2), round(pct_below_mean, 2)) for ID, h_rate, pct_below_mean in bottom_performers]
-        
-        print(f"Hash stats for group of {gpu_type}#\n -- Mean h/s: {mean:.2f}, Standard deviation: {std_dev:.2f}, Worst performers: {rounded_bottom_performers}\n")
-        outliers[gpu_type].extend(rounded_bottom_performers)
+        print(f"**{gpu_type} Performance Stats:**")
+        print(f"- Average hash rate: {mean:.2f} H/s, Standard deviation: {stats[gpu_type]['std_dev']:.2f} H/s")
 
+        if gpu_type in highlighted_outliers and highlighted_outliers[gpu_type]:
+            print("- Note: Some instances are below the average hash rate:")
+            for ID, h_rate, z_score in highlighted_outliers[gpu_type]:
+                percent_from_mean = (mean - h_rate) / mean * 100  # Calculate the percentage from the mean here
+                print(f"  - Instance ID {ID}: {h_rate:.2f}H/s, {percent_from_mean:.2f}% below average, Variance: {z_score:.2f} Z-Score")
+            print()
+        else:
+            print("- All instances are performing within expected range.\n")
+    else:
+        insufficient_data_messages.append(f"**{gpu_type}:** Not enough data to measure performance stats.")
 
+# Print messages for insufficient data at the end
+print("")  # Blank line for visual separation
+print("______________________________________________________") 
+for message in insufficient_data_messages:
+    print(message)
 
 # Exit the script
 sys.exit()
