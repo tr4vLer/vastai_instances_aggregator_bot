@@ -1,5 +1,6 @@
 # VASTAI GPU Performance Aggregator for XENGPUMiners
-*I greatly appreciate any donation: 0x7aeEaB74451ab483dc82199597Fd4261ba0BF499*
+
+## I greatly appreciate any donation (ERC20): 0x7aeEaB74451ab483dc82199597Fd4261ba0BF499
 
 ![image](https://github.com/tr4vLer/vastai_performance_bot/assets/149298759/03ae681b-98e0-4114-a4aa-5e2b3033c240)
 
