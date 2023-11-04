@@ -64,7 +64,7 @@ Use your terminal or PowerShell to install the following requirements:
    git clone https://github.com/tr4vLer/vastai_instances_aggregator_bot.git && cd vastai_instances_aggregator_bot && chmod 600 api_key.txt && chmod +x vastai_instances_aggregator_bot.py
 2. Open `vastai_instances_aggregator_bot.py` in a text editor and edit **Line 41** with the path for your SSH key. Follow the detailed instructions included there.
 3. Edit api_key.txt with your Vast.ai API key. The key should be all the file contains. Find your API key on https://cloud.vast.ai/account/. Optionally, use `sudo nano api_key.txt` from the command line.
-Run the script with the command:
+4. Run the script with the command:
 
    ```sh
     sudo sh -c 'nohup python3 vastai_instances_aggregator_bot.py > debug_output.log 2>&1 &' && tail -f debug_output.log
