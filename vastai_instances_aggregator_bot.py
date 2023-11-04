@@ -67,7 +67,7 @@ sort_order = 'ascending'
 # Setting a lower threshold means you're tightening the criteria and will get alerts for smaller deviations from the average.
 # A default threshold of 2 indicates GPUs that performing 2x standard deviations below the group average
 # It's a way to catch the biggest concerns without too many false alarms. Adjust the threshold to find the best balance for your monitoring needs.
-threshold = 2
+threshold = 1.5
 
 ####### End of user configuration ####### 
 
@@ -393,17 +393,23 @@ for gpu_type in gpu_hash_rates.keys():  # Iterate through all GPU types
     if gpu_type in stats:
         mean = stats[gpu_type]["mean"]
         std_dev = stats[gpu_type]["std_dev"]
-        print(f"**{gpu_type} Performance Stats:**")
-        print(f"- Average hash rate: {mean:.2f} H/s, Standard deviation: {stats[gpu_type]['std_dev']:.2f} H/s")
+        print(f"\n**{gpu_type} Performance Stats:**")
+        print(f"- Average hash rate: {mean:.2f} H/s, Standard deviation: {std_dev:.2f} H/s")
 
         if gpu_type in highlighted_outliers and highlighted_outliers[gpu_type]:
+            # Sort the highlighted outliers by Z-Score from lowest to highest (worst to best)
+            sorted_outliers = sorted(highlighted_outliers[gpu_type], key=lambda x: x[2])
+            
             print("- Note: Some instances are below the average hash rate:")
-            for ID, h_rate, z_score in highlighted_outliers[gpu_type]:
+            for ID, h_rate, z_score in sorted_outliers:
                 percent_from_mean = (mean - h_rate) / mean * 100  # Calculate the percentage from the mean here
                 print(f"  - Instance ID {ID}: {h_rate:.2f}H/s, {percent_from_mean:.2f}% below average, Variance: {z_score:.2f} Z-Score")
             print()
         else:
-            print("- All instances are performing within expected range.\n")
+            # Check the standard deviation and print an additional message if needed
+            print("- All instances are performing within expected range.")
+            if std_dev > 50:
+                print(f"  (!) Warning: Alarming deviation for {gpu_type} above 50 H/s! Consider lowering the Z-Score threshold in User configuration and re-run script for more details.")
     else:
         insufficient_data_messages.append(f"**{gpu_type}:** Not enough data to measure performance stats.")
 
