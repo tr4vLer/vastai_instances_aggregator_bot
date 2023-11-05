@@ -67,7 +67,7 @@ sort_order = 'ascending'
 # Setting a lower threshold means you're tightening the criteria and will get alerts for smaller deviations from the average.
 # A default threshold of 2 indicates GPUs that performing 2x standard deviations below the group average
 # It's a way to catch the biggest concerns without too many false alarms. Adjust the threshold to find the best balance for your monitoring needs.
-threshold = 1.5
+threshold = 1
 
 ####### End of user configuration ####### 
 
@@ -107,74 +107,109 @@ def instance_list():
     """Function to list instances and get SSH information."""
     url = f'https://console.vast.ai/api/v0/instances/?api_key={api_key}'
     headers = {'Accept': 'application/json'}
-    response = requests.get(url, headers=headers)
     ssh_info_list = []
+    total_dph_running_machines = 0  # Initialized at the start
 
-    if response.status_code == 200:
-        response_json = response.json()
+    for attempt in range(3):  # Retrying up to 3 times
+        try:
+            response = requests.get(url, headers=headers)
 
-        if 'instances' not in response_json:
-            logging.error("'instances' key not found in response. Please check the API documentation for the correct structure.")
-            return ssh_info_list
-        instances = response_json['instances']
+            if response.status_code == 200:
+                response_json = response.json()
 
-        # Print information about each instance
-        logging.info("Your Instances:")
-        
-        # Additional variables to store the total_dph for running machines        
-        total_dph_running_machines = 0
-        
-        for instance in instances:
-            instance_id = instance.get('id', 'N/A')
-            gpu_name = instance.get('gpu_name', 'N/A')
-            dph_total = instance.get('dph_total', 'N/A')
-            ssh_host = instance.get('ssh_host', 'N/A')
-            ssh_port = instance.get('ssh_port', 'N/A')
-            num_gpus = instance.get('num_gpus', 'N/A')
-            label = instance.get('label', 'N/A')
-            actual_status = instance.get('actual_status', 'N/A')
-            if actual_status.lower() == 'running':
-                total_dph_running_machines += float(dph_total)
+                if 'instances' not in response_json:
+                    logging.error("'instances' key not found in response. Please check the API documentation for the correct structure.")
+                    return ssh_info_list, total_dph_running_machines
+                instances = response_json['instances']
+                logging.info("Your Instances:")
 
-            logging.info("Instance ID: %s", instance_id)
-            logging.info("GPU Name: %s", gpu_name)
-            logging.info("Dollars Per Hour (DPH): %s", dph_total)
-            logging.info("SSH Command: ssh -p %s root@%s -L 8080:localhost:8080", ssh_port, ssh_host)
-            logging.info("Number of GPUs: %s", num_gpus)
-            logging.info("Current state: %s", actual_status)
-            logging.info("-" * 30)
+                for instance in instances:
+                    instance_id = instance.get('id', 'N/A')
+                    gpu_name = instance.get('gpu_name', 'N/A')
+                    dph_total = instance.get('dph_total', 'N/A')
+                    ssh_host = instance.get('ssh_host', 'N/A')
+                    ssh_port = instance.get('ssh_port', 'N/A')
+                    num_gpus = instance.get('num_gpus', 'N/A')
+                    label = instance.get('label', 'N/A')
+                    actual_status = instance.get('actual_status', 'N/A')
+                    if actual_status.lower() == 'running':
+                        total_dph_running_machines += float(dph_total)
 
-            ssh_info = {
-                'instance_id': instance_id,
-                'gpu_name': gpu_name,
-                'dph_total': dph_total,
-                'ssh_host': ssh_host,
-                'ssh_port': ssh_port,
-                'num_gpus': num_gpus,
-                'actual_status': actual_status,
-                'label': label
-            }
-            ssh_info_list.append(ssh_info)
+                    logging.info(f"Instance ID: {instance_id}")
+                    logging.info(f"GPU Name: {gpu_name}")
+                    logging.info(f"Dollars Per Hour (DPH): {dph_total}")
+                    logging.info(f"SSH Command: ssh -p {ssh_port} root@{ssh_host} -L 8080:localhost:8080")
+                    logging.info(f"Number of GPUs: {num_gpus}")
+                    logging.info(f"Current state: {actual_status}")
+                    logging.info("-" * 30)
 
-    else:
-        logging.error("Failed to retrieve instances. Status code: %s. Response: %s", response.status_code, response.text)
+                    ssh_info = {
+                        'instance_id': instance_id,
+                        'gpu_name': gpu_name,
+                        'dph_total': dph_total,
+                        'ssh_host': ssh_host,
+                        'ssh_port': ssh_port,
+                        'num_gpus': num_gpus,
+                        'actual_status': actual_status,
+                        'label': label
+                    }
+                    ssh_info_list.append(ssh_info)
+
+                # Break out of the retry loop upon success
+                break
+
+            elif response.status_code == 429:
+                logging.error("Too many requests, retrying in 10 seconds...")
+                if attempt < 2:  # Wait only if we have retries left
+                    time.sleep(10)
+                else:
+                    logging.error("Maximum retries reached. Please try again later.")
+            
+            elif response.status_code == 401:
+                # Handle Unauthorized error
+                logging.error("Failed to retrieve instances. Status code: 401. Response: %s", response.text)
+                logging.error("This action requires a valid login. Please make sure that api_key.txt contains the correct API key and that the key is the only thing the file contains.")
+                break  # No need to retry, authorization issues cannot be solved by retrying
+
+            else:
+                logging.error("Failed to retrieve instances. Status code: %s. Response: %s", response.status_code, response.text)
+                break  # Exit loop if an unrelated error occurs
+
+        except requests.exceptions.RequestException as e:
+            logging.error("A requests exception occurred: %s", str(e))
+            break  # Exit loop if a request-related exception occurs
+
+        except Exception as e:
+            logging.error("An unexpected error occurred: %s", str(e))
+            break  # Exit loop for any other exception
 
     return ssh_info_list, total_dph_running_machines
+
 
 def clean_ansi_codes(input_string):
     ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]', re.IGNORECASE)
     return ansi_escape.sub('', input_string)
 
-def get_log_info(ssh_host, ssh_port, username):
+import paramiko
+import logging
+import re
 
+def get_log_info(ssh_host, ssh_port, username, private_key_path, passphrase=None):
     # Create an SSH client
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     
     try:
-        # Load the private key
-        key = paramiko.Ed25519Key(filename=private_key_path, password=passphrase)
-        
+        # Attempt to load the private key with the provided passphrase
+        try:
+            key = paramiko.Ed25519Key(filename=private_key_path, password=passphrase)
+        except paramiko.ssh_exception.PasswordRequiredException:
+            logging.error("Private key file is encrypted and requires a passphrase.")
+            return None, None, None, None, None, None, None, None
+        except paramiko.ssh_exception.SSHException as e:
+            logging.error("Failed to decrypt private key with provided passphrase: %s", e)
+            return None, None, None, None, None, None, None, None
+
         # Connect to the server
         ssh.connect(ssh_host, port=ssh_port, username=username, pkey=key)
         
@@ -215,13 +250,15 @@ def get_log_info(ssh_host, ssh_port, username):
         ssh.close()
 
      
-def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, output_file='table_output.txt'):
+def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate, output_file='table_output.txt'):
+    if not data:  # If data list is empty, do not proceed.
+        print("No data to print.")
+        return
     # Define the table and its columns
     table = PrettyTable()
     table.field_names = ["Instance ID", "GPU Name", "GPU's", "USD/h", "USD/GPU", "Instance h/s", "GPU h/s", "XNM Blocks", "Runtime", "Block/h", "h/s/USD", "USD/Block", "Label"]
 
-    
-    # Add rows to the table to console
+    # Add rows to the table
     for row in data:
         table.add_row(row)
 
@@ -229,13 +266,29 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_d
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Print the table
-    if mean_difficulty is not None:
-        print(f"\nTimestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f} h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$, Total Blocks/h: {sum_normal_block_per_hour:.2f}")
-    print(table)
+    try:
+        if mean_difficulty is not None:
+            difficulty = int(mean_difficulty)
+        else:
+            difficulty = "N/A"
+        
+        total_hash_rate_str = f"{total_hash_rate:.2f} h/s" if total_hash_rate is not None else "N/A"
+        total_dph_running_machines_str = f"{total_dph_running_machines:.4f}$" if total_dph_running_machines is not None else "N/A"
+        average_dollars_per_normal_block_str = f"{average_dollars_per_normal_block:.4f}$" if average_dollars_per_normal_block is not None else "N/A"
+        sum_normal_block_per_hour_str = f"{sum_normal_block_per_hour:.2f}" if sum_normal_block_per_hour is not None else "N/A"
+
+        print(f"\nTimestamp: {timestamp}, Difficulty: {difficulty}, Total Hash: {total_hash_rate_str}, Total DPH: {total_dph_running_machines_str}, Avg_$/Block: {average_dollars_per_normal_block_str}, Total Blocks/h: {sum_normal_block_per_hour_str}")
+        print(table)
+    except TypeError as e:
+        print(f"Error printing table: {e}")
 
     # Write the table and timestamp to a text file
     with open(output_file, 'a') as f:
-        f.write(f"Timestamp: {timestamp}, Difficulty: {int(mean_difficulty)}, Total Hash: {total_hash_rate:.2f} h/s, Total DPH: {total_dph_running_machines:.4f}$, Avg_$/Block: {average_dollars_per_normal_block:.4f}$, Total Blocks/h: {sum_normal_block_per_hour:.2f}\n{table}\n")
+        try:
+            f.write(f"Timestamp: {timestamp}, Difficulty: {difficulty}, Total Hash: {total_hash_rate_str}, Total DPH: {total_dph_running_machines_str}, Avg_$/Block: {average_dollars_per_normal_block_str}, Total Blocks/h: {sum_normal_block_per_hour_str}\n{table}\n")
+        except TypeError as e:
+            print(f"Error writing to file: {e}")
+
     print(f"Table also written to {output_file}\n")
 
 
@@ -256,7 +309,13 @@ hash_rates = []
 dollars_per_normal_block_values = []
 sum_normal_block_per_hour = 0
 table_data = []
-
+mean_difficulty = None
+average_dollars_per_normal_block = None
+usd_per_gpu = None
+hash_rate_per_gpu = None
+hash_rate_per_usd = None
+label = None
+total_hash_rate = sum(hash_rates)
 
 # Fetch Log Information for Each Instance
 for ssh_info in ssh_info_list:
@@ -271,7 +330,7 @@ for ssh_info in ssh_info_list:
     ssh_port = ssh_info['ssh_port']
 
     logging.info("Fetching log info for instance ID: %s", instance_id)
-    hours, minutes, seconds, super_blocks, normal_blocks, xuni_blocks, hash_rate, difficulty = get_log_info(ssh_host, ssh_port, username)
+    hours, minutes, seconds, super_blocks, normal_blocks, xuni_blocks, hash_rate, difficulty = get_log_info(ssh_host, ssh_port, username, private_key_path, passphrase)
 
     if num_gpus != 'N/A' and dph_total != 'N/A':
         usd_per_gpu = round(dph_total / float(num_gpus), 4)
@@ -361,7 +420,7 @@ for ssh_info in ssh_info_list:
     
 
 # Print the table
-print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour)
+print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate)
 
 
 # Calculate Outliers
