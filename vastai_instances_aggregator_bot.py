@@ -50,7 +50,7 @@ passphrase = ""
 # Column index by which the table should be sorted.
 # Note: Column indices start at 0. So, for example, to sort by the first column, set this value to 0.
 # Default: 11 (Assumes "USD/Block" to sort by.)
-sort_column_index = 11
+sort_column_index = 12
 
 # Order in which the table should be sorted.
 # Options: 
@@ -65,9 +65,16 @@ sort_order = 'ascending'
 # It helps you spot GPUs that aren't performing as well as you expect, compared to the group average.
 # The Z-Score measures how far a GPU's performance is from the average, in terms of group's standard deviation.
 # Setting a lower threshold means you're tightening the criteria and will get alerts for smaller deviations from the average.
-# A default threshold of 2 indicates GPUs that performing 2x standard deviations below the group average
+# A default threshold of 1 indicates GPUs that performing 2x standard deviations below the group average
 # It's a way to catch the biggest concerns without too many false alarms. Adjust the threshold to find the best balance for your monitoring needs.
 threshold = 1
+
+####### Current balance printout for Vast.ai account ####### 
+
+# Set 'print_balance_check' to 'False' if you do not wish to print your balance information.
+# When set to 'True', the script will display the current balance from your Vast.ai account.
+print_balance_check = True
+
 
 ####### End of user configuration ####### 
 
@@ -130,6 +137,7 @@ def instance_list():
                     ssh_host = instance.get('ssh_host', 'N/A')
                     ssh_port = instance.get('ssh_port', 'N/A')
                     num_gpus = instance.get('num_gpus', 'N/A')
+                    gpu_util = instance.get('gpu_util', 'N/A')
                     label = instance.get('label', 'N/A')
                     actual_status = instance.get('actual_status', 'N/A')
                     if actual_status.lower() == 'running':
@@ -150,6 +158,7 @@ def instance_list():
                         'ssh_host': ssh_host,
                         'ssh_port': ssh_port,
                         'num_gpus': num_gpus,
+                        'gpu_util': gpu_util,
                         'actual_status': actual_status,
                         'label': label
                     }
@@ -185,6 +194,21 @@ def instance_list():
 
     return ssh_info_list, total_dph_running_machines
 
+import requests
+
+def check_vastai_balance(api_key):
+    url = f'https://console.vast.ai/api/v0/users/current?api_key={api_key}'
+    headers = {'Accept': 'application/json'}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        balance = data.get('credit', None)
+        if balance is not None:
+            print(f"Your Vast.ai balance is: ${balance:.2f}")
+        else:
+            print("Balance information was not available in the response.")
+    else:
+        print(f"Failed to retrieve data: {response.status_code}")
 
 def clean_ansi_codes(input_string):
     ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]', re.IGNORECASE)
@@ -256,7 +280,7 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_d
         return
     # Define the table and its columns
     table = PrettyTable()
-    table.field_names = ["Instance ID", "GPU Name", "GPU's", "USD/h", "USD/GPU", "Instance h/s", "GPU h/s", "XNM Blocks", "Runtime", "Block/h", "h/s/USD", "USD/Block", "Label"]
+    table.field_names = ["Instance ID", "GPU Name", "GPU's", "Util.%", "USD/h", "USD/GPU", "Inst.H/s", "GPU H/s", "XNM Blocks", "Runtime", "Block/h", "H/s/USD", "USD/Block", "Label"]
 
     # Add rows to the table
     for row in data:
@@ -276,7 +300,8 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_d
         total_dph_running_machines_str = f"{total_dph_running_machines:.4f}$" if total_dph_running_machines is not None else "N/A"
         average_dollars_per_normal_block_str = f"{average_dollars_per_normal_block:.4f}$" if average_dollars_per_normal_block is not None else "N/A"
         sum_normal_block_per_hour_str = f"{sum_normal_block_per_hour:.2f}" if sum_normal_block_per_hour is not None else "N/A"
-
+        
+        print("")
         print(f"\nTimestamp: {timestamp}, Difficulty: {difficulty}, Total Hash: {total_hash_rate_str}, Total DPH: {total_dph_running_machines_str}, Avg_$/Block: {average_dollars_per_normal_block_str}, Total Blocks/h: {sum_normal_block_per_hour_str}")
         print(table)
     except TypeError as e:
@@ -316,12 +341,14 @@ hash_rate_per_gpu = None
 hash_rate_per_usd = None
 label = None
 total_hash_rate = sum(hash_rates)
-
+gpu_util = None
+gpu_util_warnings_set = set()
 # Fetch Log Information for Each Instance
 for ssh_info in ssh_info_list:
     instance_id = ssh_info['instance_id']
     gpu_name = ssh_info['gpu_name']
     num_gpus = ssh_info['num_gpus']
+    gpu_util = ssh_info['gpu_util']
     actual_status = ssh_info['actual_status']
     label = ssh_info['label'] if ssh_info['label'] is not None else ''       
     dph_total = float(ssh_info['dph_total'])  # Convert DPH to float for calculations
@@ -331,6 +358,12 @@ for ssh_info in ssh_info_list:
 
     logging.info("Fetching log info for instance ID: %s", instance_id)
     hours, minutes, seconds, super_blocks, normal_blocks, xuni_blocks, hash_rate, difficulty = get_log_info(ssh_host, ssh_port, username, private_key_path, passphrase)
+
+    # Warning if instance is running but GPU not fully utilized
+    if actual_status == "running" and gpu_util is not None and gpu_util < 75:  # Check if gpu_util is below 99%
+        warning_message = f"GPU Utilization for instance {instance_id} is at {gpu_util:.2f}% - Make sure XENGPUMiner is working!"
+        if warning_message not in gpu_util_warnings_set:
+            gpu_util_warnings_set.add(warning_message)
 
     if num_gpus != 'N/A' and dph_total != 'N/A':
         usd_per_gpu = round(dph_total / float(num_gpus), 4)
@@ -375,7 +408,7 @@ for ssh_info in ssh_info_list:
         else:
             hash_rate_per_gpu = 'N/A'
         
-        table_data.append([instance_id, gpu_name, num_gpus, round(dph_total, 4), round(usd_per_gpu, 4), hash_rate, hash_rate_per_gpu, normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(hash_rate_per_usd, 2), round(dollars_per_normal_block, 2), label])        
+        table_data.append([instance_id, gpu_name, num_gpus, round(gpu_util, 2), round(dph_total, 4), round(usd_per_gpu, 4), hash_rate, hash_rate_per_gpu, normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(hash_rate_per_usd, 2), round(dollars_per_normal_block, 2), label])        
     else:
         logging.error("Failed to retrieve log information or normal blocks is None for instance ID: %s", instance_id)
 
@@ -417,12 +450,16 @@ for ssh_info in ssh_info_list:
                                 reverse=(sort_order == 'descending'))
         else:
             print("Error: Not all rows have the same number of columns.")
-    
+
+if print_balance_check:
+    print("\n" + "-" * 60 + "\n")
+    check_vastai_balance(api_key)
+    print("\n" + "-" * 60)
 
 # Print the table
 print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate)
-
-
+   
+    
 # Calculate Outliers
 outliers = defaultdict(list)
 performances = defaultdict(lambda: {'bottom': []})
@@ -446,13 +483,20 @@ for gpu_type, hash_rates in gpu_hash_rates.items():
                 if z_score < -threshold:
                     highlighted_outliers[gpu_type].append((instance_id, instance_hash_rate, z_score))
 
+
+# Print Warnings if GPU not fully utilized
+for warning in gpu_util_warnings_set:
+    logging.warning(warning)
+print("\n" + "-" * 60 )  # Print a blank line for visual separation if there were any warnings     
+
 # Print Outliers and Stats
 insufficient_data_messages = []  # List to store messages for insufficient data
 for gpu_type in gpu_hash_rates.keys():  # Iterate through all GPU types
+
     if gpu_type in stats:
         mean = stats[gpu_type]["mean"]
         std_dev = stats[gpu_type]["std_dev"]
-        print(f"\n**{gpu_type} Performance Stats:**")
+        print(f"\n** {gpu_type} Performance Stats: **")
         print(f"- Average hash rate: {mean:.2f} H/s, Standard deviation: {std_dev:.2f} H/s")
 
         if gpu_type in highlighted_outliers and highlighted_outliers[gpu_type]:
@@ -470,11 +514,10 @@ for gpu_type in gpu_hash_rates.keys():  # Iterate through all GPU types
             if std_dev > 50:
                 print(f"  (!) Warning: Alarming deviation for {gpu_type} above 50 H/s! Consider lowering the Z-Score threshold in User configuration and re-run script for more details.")
     else:
-        insufficient_data_messages.append(f"**{gpu_type}:** Not enough data to measure performance stats.")
+        insufficient_data_messages.append(f"** {gpu_type}: ** Not enough data to measure performance stats.")
 
 # Print messages for insufficient data at the end
-print("")  # Blank line for visual separation
-print("______________________________________________________") 
+print("\n" + "-" * 60 + "\n")
 for message in insufficient_data_messages:
     print(message)
 
