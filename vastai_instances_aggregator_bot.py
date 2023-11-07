@@ -194,9 +194,30 @@ def instance_list():
 
     return ssh_info_list, total_dph_running_machines
 
-import requests
 
-def check_vastai_balance(api_key):
+# Function to calculate time covered by balance
+def calculate_time_covered_by_balance(balance, total_dph):
+    # Calculate the total daily cost by multiplying the hourly cost by 24
+    daily_cost = total_dph * 24
+    # Add a 2% fee to the total daily cost
+    daily_cost_with_fee = daily_cost * 1.02  # 2% fee
+    # Calculate the number of days the balance will last
+    days_covered = balance / daily_cost_with_fee
+    # Extract the whole days
+    whole_days = int(days_covered)
+    # Calculate the remaining hours after whole days
+    remaining_hours = (days_covered - whole_days) * 24
+    # Extract the whole hours
+    whole_hours = int(remaining_hours)
+    # Calculate the remaining minutes after whole hours
+    remaining_minutes = (remaining_hours - whole_hours) * 60
+    # Extract the whole minutes
+    whole_minutes = int(remaining_minutes)
+
+    return whole_days, whole_hours, whole_minutes
+
+# Function to check Vast.ai balance
+def check_vastai_balance(api_key, total_dph_running_machines):
     url = f'https://console.vast.ai/api/v0/users/current?api_key={api_key}'
     headers = {'Accept': 'application/json'}
     response = requests.get(url, headers=headers)
@@ -204,19 +225,22 @@ def check_vastai_balance(api_key):
         data = response.json()
         balance = data.get('credit', None)
         if balance is not None:
+            balance = float(balance)  # Ensure the balance is a float
             print(f"Your Vast.ai balance is: ${balance:.2f}")
+            # Convert the hourly cost string to a float and then pass it to the calculation function
+            hourly_cost = total_dph_running_machines
+            days, hours, minutes = calculate_time_covered_by_balance(balance, hourly_cost)
+            print(f"Your balance with current total DPH value will last for approximately {days} days, {hours} hours, and {minutes} minutes.")
         else:
             print("Balance information was not available in the response.")
     else:
         print(f"Failed to retrieve data: {response.status_code}")
 
+# Function to remove ANSI escape codes
 def clean_ansi_codes(input_string):
     ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]', re.IGNORECASE)
     return ansi_escape.sub('', input_string)
 
-import paramiko
-import logging
-import re
 
 def get_log_info(ssh_host, ssh_port, username, private_key_path, passphrase=None):
     # Create an SSH client
@@ -360,7 +384,7 @@ for ssh_info in ssh_info_list:
     hours, minutes, seconds, super_blocks, normal_blocks, xuni_blocks, hash_rate, difficulty = get_log_info(ssh_host, ssh_port, username, private_key_path, passphrase)
 
     # Warning if instance is running but GPU not fully utilized
-    if actual_status == "running" and gpu_util is not None and gpu_util < 75:  # Check if gpu_util is below 99%
+    if actual_status == "running" and gpu_util is not None and gpu_util < 85:  # Check if gpu_util is below 90%
         warning_message = f"GPU Utilization for instance {instance_id} is at {gpu_util:.2f}% - Make sure XENGPUMiner is working!"
         if warning_message not in gpu_util_warnings_set:
             gpu_util_warnings_set.add(warning_message)
@@ -453,7 +477,7 @@ for ssh_info in ssh_info_list:
 
 if print_balance_check:
     print("\n" + "-" * 60 + "\n")
-    check_vastai_balance(api_key)
+    check_vastai_balance(api_key, total_dph_running_machines)
     print("\n" + "-" * 60)
 
 # Print the table
