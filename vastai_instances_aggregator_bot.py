@@ -51,7 +51,7 @@ passphrase = ""
 # Column index by which the table should be sorted.
 # Note: Column indices start at 0. So, for example, to sort by the first column, set this value to 0.
 # Default: 12 (Assumes "USD/Block" to sort by.)
-sort_column_index = 11
+sort_column_index = 12
 
 # Order in which the table should be sorted.
 # Options: 
