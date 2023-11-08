@@ -4,6 +4,7 @@ import paramiko
 import re
 import sys
 import datetime
+import time
 from prettytable import PrettyTable 
 from collections import defaultdict
 import numpy as np
@@ -50,7 +51,7 @@ passphrase = ""
 # Column index by which the table should be sorted.
 # Note: Column indices start at 0. So, for example, to sort by the first column, set this value to 0.
 # Default: 12 (Assumes "USD/Block" to sort by.)
-sort_column_index = 12
+sort_column_index = 11
 
 # Order in which the table should be sorted.
 # Options: 
@@ -199,8 +200,8 @@ def instance_list():
 def calculate_time_covered_by_balance(balance, total_dph):
     # Calculate the total daily cost by multiplying the hourly cost by 24
     daily_cost = total_dph * 24
-    # Add a 2% fee to the total daily cost
-    daily_cost_with_fee = daily_cost * 1.02  # 2% fee
+    # Add a 1% fee disk space cost to the total daily cost
+    daily_cost_with_fee = daily_cost * 1.01  # 1% fee
     # Calculate the number of days the balance will last
     days_covered = balance / daily_cost_with_fee
     # Extract the whole days
@@ -221,14 +222,19 @@ def check_vastai_balance(api_key, total_dph_running_machines):
     url = f'https://console.vast.ai/api/v0/users/current?api_key={api_key}'
     headers = {'Accept': 'application/json'}
     response = requests.get(url, headers=headers)
+
     if response.status_code == 200:
         data = response.json()
         balance = data.get('credit', None)
         if balance is not None:
             balance = float(balance)  # Ensure the balance is a float
-            print(f"Your Vast.ai balance is: ${balance:.2f}")
-            # Convert the hourly cost string to a float and then pass it to the calculation function
             hourly_cost = total_dph_running_machines
+            daily_cost = hourly_cost * 24
+            daily_cost_with_fee = daily_cost * 1.01  
+            # Display the balance and estimated spend rate
+            print(f"Your Vast.ai balance is: ${balance:.2f}")
+            print(f"Your estimated spend rate: ${daily_cost_with_fee:.2f}/day")
+            # Calculate the time covered by balance
             days, hours, minutes = calculate_time_covered_by_balance(balance, hourly_cost)
             print(f"Your balance with current total DPH value will last for approximately {days} days, {hours} hours, and {minutes} minutes.")
         else:
