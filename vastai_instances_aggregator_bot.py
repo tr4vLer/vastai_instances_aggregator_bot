@@ -51,7 +51,7 @@ passphrase = ""
 # Column index by which the table should be sorted.
 # Note: Column indices start at 0. So, for example, to sort by the first column, set this value to 0.
 # Default: 12 (Assumes "USD/Block" to sort by.)
-sort_column_index = 12
+sort_column_index = 11
 
 # Order in which the table should be sorted.
 # Options: 
@@ -117,6 +117,7 @@ def instance_list():
     headers = {'Accept': 'application/json'}
     ssh_info_list = []
     total_dph_running_machines = 0  # Initialized at the start
+    total_gpus_running = 0  # Counter for total GPUs of running instances
 
     for attempt in range(3):  # Retrying up to 3 times
         try:
@@ -143,6 +144,7 @@ def instance_list():
                     actual_status = instance.get('actual_status', 'N/A')
                     if actual_status.lower() == 'running':
                         total_dph_running_machines += float(dph_total)
+                        total_gpus_running += int(num_gpus) 
 
                     logging.info(f"Instance ID: {instance_id}")
                     logging.info(f"GPU Name: {gpu_name}")
@@ -193,7 +195,7 @@ def instance_list():
             logging.error("An unexpected error occurred: %s", str(e))
             break  # Exit loop for any other exception
 
-    return ssh_info_list, total_dph_running_machines
+    return ssh_info_list, total_dph_running_machines, total_gpus_running
 
 
 # Function to calculate time covered by balance
@@ -304,7 +306,7 @@ def get_log_info(ssh_host, ssh_port, username, private_key_path, passphrase=None
         ssh.close()
 
      
-def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate, output_file='table_output.txt'):
+def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate, total_gpus_running, output_file='table_output.txt'):
     if not data:  # If data list is empty, do not proceed.
         print("No data to print.")
         return
@@ -332,7 +334,7 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_d
         sum_normal_block_per_hour_str = f"{sum_normal_block_per_hour:.2f}" if sum_normal_block_per_hour is not None else "N/A"
         
         print("")
-        print(f"\nTimestamp: {timestamp}, Difficulty: {difficulty}, Total Hash: {total_hash_rate_str}, Total DPH: {total_dph_running_machines_str}, Avg_$/Block: {average_dollars_per_normal_block_str}, Total Blocks/h: {sum_normal_block_per_hour_str}")
+        print(f"\nTimestamp: {timestamp}, GPU's: {total_gpus_running}, Difficulty: {difficulty}, Total Hash: {total_hash_rate_str}, Total DPH: {total_dph_running_machines_str}, Avg_$/Block: {average_dollars_per_normal_block_str}, Total Blocks/h: {sum_normal_block_per_hour_str}")
         print(table)
     except TypeError as e:
         print(f"Error printing table: {e}")
@@ -340,7 +342,7 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_d
     # Write the table and timestamp to a text file
     with open(output_file, 'a') as f:
         try:
-            f.write(f"Timestamp: {timestamp}, Difficulty: {difficulty}, Total Hash: {total_hash_rate_str}, Total DPH: {total_dph_running_machines_str}, Avg_$/Block: {average_dollars_per_normal_block_str}, Total Blocks/h: {sum_normal_block_per_hour_str}\n{table}\n")
+            f.write(f"Timestamp: {timestamp}, GPU's: {total_gpus_running}, Difficulty: {difficulty}, Total Hash: {total_hash_rate_str}, Total DPH: {total_dph_running_machines_str}, Avg_$/Block: {average_dollars_per_normal_block_str}, Total Blocks/h: {sum_normal_block_per_hour_str}\n{table}\n")
         except TypeError as e:
             print(f"Error writing to file: {e}")
 
@@ -351,7 +353,7 @@ def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_d
 test_api_connection()
 
 # List Instances and Get SSH Information
-ssh_info_list, total_dph_running_machines = instance_list()
+ssh_info_list, total_dph_running_machines, total_gpus_running = instance_list()
 username = "root"
 
 
@@ -487,7 +489,7 @@ if print_balance_check:
     print("\n" + "-" * 60)
 
 # Print the table
-print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate)
+print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate, total_gpus_running)
    
     
 # Calculate Outliers
