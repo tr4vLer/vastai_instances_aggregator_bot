@@ -84,7 +84,7 @@ print_balance_check = True
 # Logging Configuration
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s',
-                    handlers=[logging.FileHandler("script_output.log"),
+                    handlers=[logging.FileHandler("script_output2.log"),
                               logging.StreamHandler()])
 
 # Load API Key
@@ -140,6 +140,9 @@ def instance_list():
                     ssh_port = instance.get('ssh_port', 'N/A')
                     num_gpus = instance.get('num_gpus', 'N/A')
                     gpu_util = instance.get('gpu_util', 'N/A')
+                    disk_util = instance.get('disk_util', 'N/A')
+                    disk_space = instance.get('disk_space', 'N/A')
+                    cpu_util = instance.get('cpu_util', 'N/A')
                     label = instance.get('label', 'N/A')
                     actual_status = instance.get('actual_status', 'N/A')
                     if actual_status.lower() == 'running':
@@ -163,7 +166,10 @@ def instance_list():
                         'num_gpus': num_gpus,
                         'gpu_util': gpu_util,
                         'actual_status': actual_status,
-                        'label': label
+                        'label': label,
+                        'disk_util': disk_util,
+                        'disk_space': disk_space,
+                        'cpu_util': cpu_util
                     }
                     ssh_info_list.append(ssh_info)
 
@@ -306,13 +312,13 @@ def get_log_info(ssh_host, ssh_port, username, private_key_path, passphrase=None
         ssh.close()
 
      
-def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate, total_gpus_running, output_file='table_output.txt'):
+def print_table(data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, disk_util, disk_space, cpu_util, sum_normal_block_per_hour, total_hash_rate, total_gpus_running, output_file='table_output.txt'):
     if not data:  # If data list is empty, do not proceed.
         print("No data to print.")
         return
     # Define the table and its columns
     table = PrettyTable()
-    table.field_names = ["Instance ID", "GPU Name", "GPU's", "Util.%", "USD/h", "USD/GPU", "Inst.H/s", "GPU H/s", "XNM Blocks", "Runtime", "Block/h", "H/s/USD", "USD/Block", "Label"]
+    table.field_names = ["Instance ID", "GPU Name", "GPU's", "Util.%", "USD/h", "USD/GPU", "Inst.H/s", "GPU H/s", "XNM Blocks", "Runtime", "Block/h", "H/s/USD", "USD/Block", "Label", "CPU %", "HDD %"]
 
     # Add rows to the table
     for row in data:
@@ -372,6 +378,9 @@ usd_per_gpu = None
 hash_rate_per_gpu = None
 hash_rate_per_usd = None
 label = None
+disk_util = None
+disk_space = None
+cpu_util = None
 total_hash_rate = sum(hash_rates)
 gpu_util = None
 gpu_util_warnings_set = set()
@@ -382,7 +391,10 @@ for ssh_info in ssh_info_list:
     num_gpus = ssh_info['num_gpus']
     gpu_util = ssh_info['gpu_util']
     actual_status = ssh_info['actual_status']
-    label = ssh_info['label'] if ssh_info['label'] is not None else ''       
+    label = ssh_info['label'] if ssh_info['label'] is not None else ''  
+    cpu_util = ssh_info['cpu_util']
+    disk_util = ssh_info['disk_util'] 
+    disk_space = ssh_info['disk_space']    
     dph_total = float(ssh_info['dph_total'])  # Convert DPH to float for calculations
     dph_values.append(dph_total)
     ssh_host = ssh_info['ssh_host']
@@ -432,6 +444,7 @@ for ssh_info in ssh_info_list:
         else:
             dollars_per_normal_block = 0
         
+        hdd_utilization_percent = (disk_util / disk_space) * 100
         hash_rate_per_gpu = hash_rate / float(num_gpus) if num_gpus != 'N/A' and hash_rate is not None else 'N/A'
         
         if hash_rate is not None and hash_rate != 0 and num_gpus != 'N/A':
@@ -440,7 +453,7 @@ for ssh_info in ssh_info_list:
         else:
             hash_rate_per_gpu = 'N/A'
         
-        table_data.append([instance_id, gpu_name, num_gpus, round(gpu_util, 2), round(dph_total, 4), round(usd_per_gpu, 4), hash_rate, hash_rate_per_gpu, normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(hash_rate_per_usd, 2), round(dollars_per_normal_block, 2), label])        
+        table_data.append([instance_id, gpu_name, num_gpus, round(gpu_util, 2), round(dph_total, 4), round(usd_per_gpu, 4), hash_rate, hash_rate_per_gpu, normal_blocks, round(runtime_hours, 2), round(normal_block_per_hour, 2), round(hash_rate_per_usd, 2), round(dollars_per_normal_block, 2), label, round(cpu_util, 2), round(hdd_utilization_percent, 2)])        
     else:
         logging.error("Failed to retrieve log information or normal blocks is None for instance ID: %s", instance_id)
 
@@ -489,7 +502,7 @@ if print_balance_check:
     print("\n" + "-" * 60)
 
 # Print the table
-print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, sum_normal_block_per_hour, total_hash_rate, total_gpus_running)
+print_table(table_data, mean_difficulty, average_dollars_per_normal_block, total_dph_running_machines, usd_per_gpu, hash_rate_per_gpu, hash_rate_per_usd, label, cpu_util, disk_util, disk_space, sum_normal_block_per_hour, total_hash_rate, total_gpus_running)
    
     
 # Calculate Outliers
